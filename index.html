@@ -39,8 +39,10 @@
     background: #FBF0D9; color: #7A5A12; font-size: 13px; font-weight: 600;
     padding: 9px 16px; text-align: center; border-bottom: 1px solid #EBD9A8;
   }
-  .topbar { padding: 20px 20px 4px; text-align: center; }
+  .topbar { padding: 20px 20px 4px; text-align: center; position: relative; }
   .topbar h1 { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+  .admin-link { position: absolute; top: 18px; right: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-decoration: none; padding: 5px 9px; border-radius: 999px; }
+  .admin-link:hover { color: var(--primary); background: var(--surface); }
 
   .container { flex: 1; width: 100%; max-width: 560px; margin: 0 auto; padding: 16px 18px 40px; display: flex; flex-direction: column; }
   .container.wide { max-width: 920px; }
@@ -64,6 +66,11 @@
   }
   .choice-card:active { transform: scale(0.98); }
   .choice-card:hover { border-color: var(--primary); }
+  .choice-card.is-done { background: var(--surface-soft); color: var(--ink-soft); }
+  .choice-card.is-done .group-meta { color: var(--primary); }
+
+  .all-done-note { background: #E8F0EA; color: var(--primary-dark); border-radius: var(--radius-sm); padding: 12px 14px; font-size: 14px; font-weight: 700; margin-bottom: 16px; text-align: center; }
+  .notice-box { background: #FBF0D9; color: #7A5A12; border-radius: var(--radius-sm); padding: 12px 14px; font-size: 13px; font-weight: 600; margin-bottom: 14px; line-height: 1.5; }
 
   .avatar {
     width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
@@ -91,6 +98,9 @@
   }
 
   .rating-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 18px; margin-bottom: 12px; }
+  .rating-group-header { display: flex; align-items: center; gap: 8px; margin: 16px 0 10px; }
+  .rating-group-header:first-child { margin-top: 0; }
+  .rating-group-header .label { font-size: 13px; font-weight: 700; color: var(--ink-soft); }
   .rating-card-top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
   .rating-card-name { font-size: 18px; font-weight: 700; }
 
@@ -157,7 +167,10 @@
   .result-avg { font-size: 17px; font-weight: 800; color: var(--primary); white-space: nowrap; }
   .result-count { font-size: 12px; color: var(--muted); font-weight: 700; white-space: nowrap; }
   .result-detail { padding: 2px 0 12px; }
-  .result-detail-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; color: var(--ink-soft); }
+  .result-detail-row { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 4px 0; color: var(--ink-soft); }
+  .result-detail-row .name { flex: 1; }
+  .result-detail-reset { background: none; border: none; color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer; padding: 2px 6px; white-space: nowrap; }
+  .result-detail-reset:hover { color: var(--danger); }
 
   .pin-screen { display: flex; align-items: center; justify-content: center; flex: 1; padding: 20px; }
   .pin-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius-lg); padding: 32px 26px; max-width: 320px; width: 100%; text-align: center; }
@@ -204,7 +217,7 @@ async function gasPost(action, body) {
 }
 
 // ---------------- Mock in-memory backend (preview mode) ----------------
-const mock = { groups: [], scores: [], pin: '7846' };
+const mock = { groups: [], scores: [], pin: '7846', maxScore: 20 };
 function seedMockData() {
   const g1 = { id: 'demo_g1', name: 'กลุ่ม 1 (ตัวอย่าง)', members: [
     { id: 'demo_g1_m1', name: 'พลอย' }, { id: 'demo_g1_m2', name: 'ต้น' },
@@ -214,30 +227,59 @@ function seedMockData() {
     { id: 'demo_g2_m1', name: 'มายด์' }, { id: 'demo_g2_m2', name: 'บอส' }, { id: 'demo_g2_m3', name: 'ปาล์ม' }
   ] };
   mock.groups = [g1, g2];
+  // Demo ratings all come from members of a DIFFERENT group than the target,
+  // matching the rule that students rate other groups only.
   mock.scores = [
-    { groupId: g1.id, evaluatorId: g1.members[1].id, evaluatorName: 'ต้น', targetId: g1.members[0].id, targetName: 'พลอย', score: 19 },
-    { groupId: g1.id, evaluatorId: g1.members[2].id, evaluatorName: 'แนน', targetId: g1.members[0].id, targetName: 'พลอย', score: 17 }
+    { groupId: g1.id, evaluatorId: g2.members[0].id, evaluatorName: 'มายด์', targetId: g1.members[0].id, targetName: 'พลอย', score: 19 },
+    { groupId: g1.id, evaluatorId: g2.members[1].id, evaluatorName: 'บอส', targetId: g1.members[0].id, targetName: 'พลอย', score: 17 },
+    { groupId: g1.id, evaluatorId: g2.members[2].id, evaluatorName: 'ปาล์ม', targetId: g1.members[0].id, targetName: 'พลอย', score: 20 }
   ];
 }
 seedMockData();
 function mockDelay() { return new Promise(r => setTimeout(r, 200)); }
+function mockFindMemberGroup(memberId) {
+  for (const g of mock.groups) {
+    if (g.members.some(m => m.id === memberId)) return { groupId: g.id, groupName: g.name };
+  }
+  return null;
+}
 
 const mockApi = {
-  async getGroups() { await mockDelay(); return { ok: true, groups: mock.groups }; },
-  async checkSubmitted(groupId, evaluatorId) {
+  async getGroups() { await mockDelay(); return { ok: true, groups: mock.groups, maxScore: mock.maxScore }; },
+  async submittedGroups(evaluatorId) {
     await mockDelay();
-    return { ok: true, submitted: mock.scores.some(s => s.groupId === groupId && s.evaluatorId === evaluatorId) };
+    const ids = [];
+    mock.scores.forEach(s => {
+      if (s.evaluatorId === evaluatorId && s.groupId && ids.indexOf(s.groupId) === -1) ids.push(s.groupId);
+    });
+    return { ok: true, groupIds: ids };
   },
-  async submitScores(groupId, evaluatorId, evaluatorName, ratings) {
+  async submitScores(evaluatorId, evaluatorName, ratings) {
     await mockDelay();
+    const ownGroup = mockFindMemberGroup(evaluatorId);
+    const ownGroupId = ownGroup ? ownGroup.groupId : null;
+    let written = 0, skipped = 0;
     ratings.forEach(r => {
       let score = Number(r.score); if (isNaN(score)) score = 0;
-      score = Math.max(0, Math.min(20, score));
-      const existing = mock.scores.find(s => s.groupId === groupId && s.evaluatorId === evaluatorId && s.targetId === r.targetId);
+      score = Math.max(0, Math.min(mock.maxScore, score));
+      const targetGroup = mockFindMemberGroup(r.targetId);
+      const groupId = targetGroup ? targetGroup.groupId : '';
+      if (r.targetId === evaluatorId || (ownGroupId && groupId === ownGroupId)) { skipped++; return; }
+      const existing = mock.scores.find(s => s.evaluatorId === evaluatorId && s.targetId === r.targetId);
       if (existing) existing.score = score;
       else mock.scores.push({ groupId, evaluatorId, evaluatorName, targetId: r.targetId, targetName: r.targetName, score });
+      written++;
     });
-    return { ok: true };
+    if (written === 0 && skipped > 0) return { ok: false, error: 'own_group_not_allowed' };
+    return { ok: true, skipped };
+  },
+  async setMaxScore(maxScore, pin) {
+    await mockDelay();
+    if (String(pin) !== String(mock.pin)) return { ok: false, error: 'invalid_pin' };
+    const value = Math.floor(Number(maxScore));
+    if (!value || isNaN(value) || value < 1 || value > 1000) return { ok: false, error: 'invalid_max_score' };
+    mock.maxScore = value;
+    return { ok: true, maxScore: value };
   },
   async checkPin(pin) { await mockDelay(); return { ok: true, valid: String(pin) === String(mock.pin) }; },
   async getResults(pin) {
@@ -246,7 +288,7 @@ const mockApi = {
     const byTarget = {};
     mock.scores.forEach(s => {
       if (!byTarget[s.targetId]) byTarget[s.targetId] = [];
-      byTarget[s.targetId].push({ evaluatorName: s.evaluatorName, score: s.score });
+      byTarget[s.targetId].push({ evaluatorId: s.evaluatorId, evaluatorName: s.evaluatorName, score: s.score });
     });
     const results = {};
     Object.keys(byTarget).forEach(tid => {
@@ -254,7 +296,7 @@ const mockApi = {
       const sum = entries.reduce((a, e) => a + e.score, 0);
       results[tid] = { count: entries.length, average: sum / entries.length, entries };
     });
-    return { ok: true, groups: mock.groups, results };
+    return { ok: true, groups: mock.groups, results, maxScore: mock.maxScore };
   },
   async bulkAddGroups(text, pin) {
     await mockDelay();
@@ -288,8 +330,10 @@ const mockApi = {
   async deleteGroup(groupId, pin) {
     await mockDelay();
     if (String(pin) !== String(mock.pin)) return { ok: false, error: 'invalid_pin' };
+    const removedGroup = mock.groups.find(g => g.id === groupId);
+    const removedMemberIds = new Set((removedGroup ? removedGroup.members : []).map(m => m.id));
     mock.groups = mock.groups.filter(g => g.id !== groupId);
-    mock.scores = mock.scores.filter(s => s.groupId !== groupId);
+    mock.scores = mock.scores.filter(s => s.groupId !== groupId && !removedMemberIds.has(s.evaluatorId));
     return { ok: true, groups: mock.groups };
   },
   async addMember(groupId, name, pin) {
@@ -308,10 +352,10 @@ const mockApi = {
     mock.scores = mock.scores.filter(s => s.evaluatorId !== memberId && s.targetId !== memberId);
     return { ok: true, groups: mock.groups };
   },
-  async resetEvaluator(groupId, evaluatorId, pin) {
+  async resetEvaluator(evaluatorId, pin) {
     await mockDelay();
     if (String(pin) !== String(mock.pin)) return { ok: false, error: 'invalid_pin' };
-    mock.scores = mock.scores.filter(s => !(s.groupId === groupId && s.evaluatorId === evaluatorId));
+    mock.scores = mock.scores.filter(s => s.evaluatorId !== evaluatorId);
     return { ok: true };
   },
   async resetGroup(groupId, pin) {
@@ -330,8 +374,9 @@ const mockApi = {
 
 const api = {
   getGroups: () => isMock ? mockApi.getGroups() : gasGet('groups'),
-  checkSubmitted: (groupId, evaluatorId) => isMock ? mockApi.checkSubmitted(groupId, evaluatorId) : gasGet('checkSubmitted', { groupId, evaluatorId }),
-  submitScores: (groupId, evaluatorId, evaluatorName, ratings) => isMock ? mockApi.submitScores(groupId, evaluatorId, evaluatorName, ratings) : gasPost('submitScores', { groupId, evaluatorId, evaluatorName, ratings }),
+  submittedGroups: (evaluatorId) => isMock ? mockApi.submittedGroups(evaluatorId) : gasGet('submittedGroups', { evaluatorId }),
+  setMaxScore: (maxScore, pin) => isMock ? mockApi.setMaxScore(maxScore, pin) : gasPost('setMaxScore', { maxScore, pin }),
+  submitScores: (evaluatorId, evaluatorName, ratings) => isMock ? mockApi.submitScores(evaluatorId, evaluatorName, ratings) : gasPost('submitScores', { evaluatorId, evaluatorName, ratings }),
   checkPin: (pin) => isMock ? mockApi.checkPin(pin) : gasGet('checkPin', { pin }),
   getResults: (pin) => isMock ? mockApi.getResults(pin) : gasGet('results', { pin }),
   bulkAddGroups: (text, pin) => isMock ? mockApi.bulkAddGroups(text, pin) : gasPost('bulkAddGroups', { text, pin }),
@@ -339,7 +384,7 @@ const api = {
   deleteGroup: (groupId, pin) => isMock ? mockApi.deleteGroup(groupId, pin) : gasPost('deleteGroup', { groupId, pin }),
   addMember: (groupId, name, pin) => isMock ? mockApi.addMember(groupId, name, pin) : gasPost('addMember', { groupId, name, pin }),
   removeMember: (groupId, memberId, pin) => isMock ? mockApi.removeMember(groupId, memberId, pin) : gasPost('removeMember', { groupId, memberId, pin }),
-  resetEvaluator: (groupId, evaluatorId, pin) => isMock ? mockApi.resetEvaluator(groupId, evaluatorId, pin) : gasPost('resetEvaluator', { groupId, evaluatorId, pin }),
+  resetEvaluator: (evaluatorId, pin) => isMock ? mockApi.resetEvaluator(evaluatorId, pin) : gasPost('resetEvaluator', { evaluatorId, pin }),
   resetGroup: (groupId, pin) => isMock ? mockApi.resetGroup(groupId, pin) : gasPost('resetGroup', { groupId, pin }),
   changePin: (oldPin, newPin) => isMock ? mockApi.changePin(oldPin, newPin) : gasPost('changePin', { oldPin, newPin })
 };
@@ -348,8 +393,10 @@ const api = {
 const state = {
   screen: 'loading',
   groups: [],
-  selectedGroupId: null,
+  maxScore: 20,
   selectedSelfId: null,
+  selectedTargetGroupId: null,
+  submittedGroupIds: [],
   ratings: {},
   submitting: false,
   submitError: '',
@@ -360,12 +407,18 @@ const state = {
   adminError: '',
   bulkText: '',
   bulkFeedback: '',
+  memberDraftByGroup: {},
+  maxScoreDraft: null,
+  maxScoreFeedback: '',
+  maxScoreError: '',
   results: null,
   resultsLoading: false,
   expandedResultId: null,
   showChangePin: false,
   changePinError: '',
-  changePinSuccess: false
+  changePinSuccess: false,
+  pinDraftOld: '',
+  pinDraftNew: ''
 };
 let resultsPollTimer = null;
 
@@ -375,16 +428,41 @@ function initials(name) { return (name || '?').trim().charAt(0) || '?'; }
 function esc(str) {
   return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
-function currentGroup() { return state.groups.find(g => g.id === state.selectedGroupId); }
-function othersInGroup() {
-  const group = currentGroup();
-  if (!group) return [];
-  return group.members.filter(m => m.id !== state.selectedSelfId);
+function findMemberById(id) {
+  for (const g of state.groups) {
+    const m = g.members.find(m => m.id === id);
+    if (m) return m;
+  }
+  return null;
+}
+function ownGroup() {
+  return state.groups.find(g => g.members.some(m => m.id === state.selectedSelfId)) || null;
+}
+// Groups this student is allowed to rate: every group except their own.
+// Each is tagged with whether they've already submitted scores for it, so the
+// picker can show progress and they can come back for the rest later.
+function rateableGroups() {
+  const own = ownGroup();
+  return state.groups
+    .filter(g => (!own || g.id !== own.id) && g.members.length > 0)
+    .map(g => ({ ...g, done: state.submittedGroupIds.includes(g.id) }));
+}
+function targetGroup() {
+  return state.groups.find(g => g.id === state.selectedTargetGroupId) || null;
+}
+function currentTargets() {
+  const g = targetGroup();
+  return g ? g.members.filter(m => m.id !== state.selectedSelfId) : [];
 }
 function segTrack(activeCount) {
   let s = '';
   for (let i = 1; i <= 3; i++) s += `<div class="progress-seg ${i <= activeCount ? 'done' : ''}"></div>`;
   return s;
+}
+function adminLinkUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.set('admin', '1');
+  return url.toString();
 }
 
 const root = document.getElementById('app');
@@ -392,16 +470,14 @@ const root = document.getElementById('app');
 function render() {
   let html = '';
   if (isMock) html += `<div class="mock-banner">โหมดตัวอย่าง — ยังไม่เชื่อมต่อ Google Sheets (ข้อมูลจะหายเมื่อรีเฟรชหน้า)</div>`;
-  html += `<div class="topbar"><h1>ประเมินเพื่อนร่วมกลุ่ม</h1></div>`;
+  html += `<div class="topbar"><h1>ประเมินเพื่อนร่วมกลุ่ม</h1>${!state.isAdmin ? `<a class="admin-link" href="${esc(adminLinkUrl())}">ครูโอ๊ต</a>` : ''}</div>`;
 
   switch (state.screen) {
     case 'loading': html += renderLoading(); break;
     case 'noGroups': html += renderNoGroups(); break;
-    case 'pickGroup': html += renderPickGroup(); break;
     case 'pickSelf': html += renderPickSelf(); break;
-    case 'singleMember': html += renderSingleMember(); break;
+    case 'pickTargetGroup': html += renderPickTargetGroup(); break;
     case 'rating': html += renderRating(); break;
-    case 'alreadyDone': html += renderAlreadyDone(); break;
     case 'done': html += renderDone(); break;
     case 'error': html += renderError(); break;
     case 'adminPin': html += renderAdminPin(); break;
@@ -421,51 +497,63 @@ function renderNoGroups() {
 function renderError() {
   return `<div class="container"><div class="center-block"><div class="center-icon">⚠️</div><div class="center-title">เกิดข้อผิดพลาด</div><div class="center-sub">${esc(state.errorMsg || 'ไม่สามารถเชื่อมต่อได้')}</div><br/><button class="btn btn-primary" type="button" id="retryBtn">ลองใหม่</button></div></div>`;
 }
-function renderPickGroup() {
-  const cards = state.groups.map((g, i) => `
-    <button class="choice-card" type="button" data-group-id="${esc(g.id)}">
-      <span class="avatar" style="background:${groupColor(i)}">${esc(initials(g.name))}</span>
-      <span>${esc(g.name)}</span>
-      <span class="group-meta">${g.members.length} คน</span>
-    </button>`).join('');
+function renderPickSelf() {
+  const sections = state.groups.filter(g => g.members.length > 0).map((g, i) => {
+    const gi = state.groups.findIndex(sg => sg.id === g.id);
+    const cards = g.members.map(m => `
+      <button class="choice-card" type="button" data-member-id="${esc(m.id)}">
+        <span class="avatar" style="background:${groupColor(gi)}">${esc(initials(m.name))}</span>
+        <span>${esc(m.name)}</span>
+      </button>`).join('');
+    return `<div class="rating-group-header"><span class="group-dot" style="background:${groupColor(gi)}"></span><span class="label">${esc(g.name)}</span></div>${cards}`;
+  }).join('');
   return `<div class="container">
     <div class="progress-track">${segTrack(1)}</div>
-    <div class="screen-heading">เลือกกลุ่มของคุณ</div>
-    <div class="screen-sub">แตะเลือกกลุ่มที่คุณอยู่</div>
-    <div class="card-list">${cards}</div>
-  </div>`;
-}
-function renderPickSelf() {
-  const group = currentGroup();
-  const gi = state.groups.findIndex(g => g.id === state.selectedGroupId);
-  const cards = group.members.map(m => `
-    <button class="choice-card" type="button" data-member-id="${esc(m.id)}">
-      <span class="avatar" style="background:${groupColor(gi)}">${esc(initials(m.name))}</span>
-      <span>${esc(m.name)}</span>
-    </button>`).join('');
-  return `<div class="container">
-    <button class="back-link" type="button" id="backBtn">← กลับ</button>
-    <div class="progress-track">${segTrack(2)}</div>
     <div class="screen-heading">คุณคือใคร?</div>
-    <div class="screen-sub">${esc(group.name)}</div>
-    <div class="card-list">${cards}</div>
+    <div class="screen-sub">หาชื่อตัวเองแล้วแตะเลือก</div>
+    <div class="card-list">${sections}</div>
   </div>`;
 }
-function renderSingleMember() {
+function renderPickTargetGroup() {
+  const self = findMemberById(state.selectedSelfId);
+  const own = ownGroup();
+  const groups = rateableGroups();
+  if (groups.length === 0) {
+    return `<div class="container">
+      <button class="back-link" type="button" id="backBtn">← เปลี่ยนชื่อ</button>
+      <div class="center-block"><div class="center-icon">🙂</div><div class="center-title">ยังไม่มีกลุ่มอื่นให้ประเมิน</div><div class="center-sub">ตอนนี้มีแต่กลุ่มของคุณเองในระบบ</div></div>
+    </div>`;
+  }
+  const allDone = groups.every(g => g.done);
+  const cards = groups.map(g => {
+    const gi = state.groups.findIndex(sg => sg.id === g.id);
+    return `<button class="choice-card ${g.done ? 'is-done' : ''}" type="button" data-target-group-id="${esc(g.id)}">
+      <span class="avatar" style="background:${groupColor(gi)}">${esc(initials(g.name))}</span>
+      <span>${esc(g.name)}</span>
+      <span class="group-meta">${g.done ? '✓ ให้คะแนนแล้ว' : `${g.members.length} คน`}</span>
+    </button>`;
+  }).join('');
   return `<div class="container">
-    <button class="back-link" type="button" id="backBtn">← กลับ</button>
-    <div class="center-block"><div class="center-icon">🙂</div><div class="center-title">กลุ่มนี้มีสมาชิกเพียงคนเดียว</div><div class="center-sub">จึงไม่มีเพื่อนให้ประเมินในกลุ่มนี้</div></div>
+    <button class="back-link" type="button" id="backBtn">← เปลี่ยนชื่อ</button>
+    <div class="progress-track">${segTrack(2)}</div>
+    <div class="screen-heading">เลือกกลุ่มที่จะให้คะแนน</div>
+    <div class="screen-sub">สวัสดี ${esc(self ? self.name : '')} — ให้คะแนนได้ทุกกลุ่ม ยกเว้น${own ? `กลุ่มของคุณเอง (${esc(own.name)})` : 'กลุ่มของคุณเอง'} ให้ครบทีละกลุ่มได้เลย</div>
+    ${allDone ? '<div class="all-done-note">✓ ให้คะแนนครบทุกกลุ่มแล้ว ขอบคุณครับ</div>' : ''}
+    <div class="card-list">${cards}</div>
   </div>`;
 }
 function renderRating() {
-  const group = currentGroup();
-  const others = othersInGroup();
-  const gi = state.groups.findIndex(g => g.id === state.selectedGroupId);
-  const ratedCount = others.filter(m => state.ratings[m.id] != null).length;
-  const allRated = ratedCount === others.length;
-  const cards = others.map(m => {
+  const group = targetGroup();
+  const targets = currentTargets();
+  const gi = state.groups.findIndex(sg => sg.id === state.selectedTargetGroupId);
+  const max = state.maxScore;
+  const ratedCount = targets.filter(m => state.ratings[m.id] != null).length;
+  const canSubmit = ratedCount > 0;
+  const alreadyDone = state.submittedGroupIds.includes(state.selectedTargetGroupId);
+
+  const cards = targets.map(m => {
     const val = state.ratings[m.id];
-    const pct = val == null ? 0 : (val / 20) * 100;
+    const pct = val == null ? 0 : (val / max) * 100;
     return `<div class="rating-card" data-target-id="${esc(m.id)}">
       <div class="rating-card-top">
         <span class="avatar" style="background:${groupColor(gi)}">${esc(initials(m.name))}</span>
@@ -479,24 +567,35 @@ function renderRating() {
       <div class="stepper-fill-track"><div class="stepper-fill-bar" style="width:${pct}%"></div></div>
     </div>`;
   }).join('');
+
   return `<div class="container">
-    <button class="back-link" type="button" id="backBtn">← กลับ</button>
+    <button class="back-link" type="button" id="backBtn">← เลือกกลุ่มอื่น</button>
     <div class="progress-track">${segTrack(3)}</div>
-    <div class="screen-heading">ให้คะแนนเพื่อนในกลุ่ม</div>
-    <div class="screen-sub">ให้คะแนนเต็ม 20 คะแนนต่อคน (${esc(group.name)})</div>
+    <div class="screen-heading">${esc(group ? group.name : '')}</div>
+    <div class="screen-sub">ให้คะแนนเต็ม ${max} คะแนนต่อคน ให้อย่างน้อย 1 คน</div>
+    ${alreadyDone ? '<div class="notice-box">คุณเคยให้คะแนนกลุ่มนี้ไปแล้ว ถ้าส่งใหม่ คะแนนเดิมจะถูกแทนที่</div>' : ''}
     <div class="card-list">${cards}</div>
     <div class="sticky-footer">
-      <div class="progress-note">ให้คะแนนแล้ว ${ratedCount} จาก ${others.length} คน</div>
+      <div class="progress-note">${ratedCount > 0 ? `ให้คะแนนแล้ว ${ratedCount} จาก ${targets.length} คน` : 'ยังไม่ได้ให้คะแนนใครเลย'}</div>
       ${state.submitError ? `<div class="error-text" style="text-align:center;">${esc(state.submitError)}</div><br/>` : ''}
-      <button class="btn btn-primary btn-block" type="button" id="submitBtn" ${(!allRated || state.submitting) ? 'disabled' : ''}>${state.submitting ? 'กำลังส่ง...' : 'ส่งคะแนน'}</button>
+      <button class="btn btn-primary btn-block" type="button" id="submitBtn" ${(!canSubmit || state.submitting) ? 'disabled' : ''}>${state.submitting ? 'กำลังส่ง...' : 'ส่งคะแนน'}</button>
     </div>
   </div>`;
 }
-function renderAlreadyDone() {
-  return `<div class="container"><div class="center-block"><div class="center-icon">✅</div><div class="center-title">คุณให้คะแนนเพื่อนในกลุ่มนี้ไปแล้ว</div><div class="center-sub">หากต้องการแก้ไข กรุณาแจ้งครูผู้สอน</div><br/><button class="btn btn-secondary" type="button" id="restartBtn">กลับไปหน้าแรก</button></div></div>`;
-}
 function renderDone() {
-  return `<div class="container"><div class="center-block"><div class="center-icon">🎉</div><div class="center-title">ส่งคะแนนเรียบร้อยแล้ว</div><div class="center-sub">ขอบคุณที่ตั้งใจประเมินเพื่อน</div><br/><button class="btn btn-secondary" type="button" id="restartBtn">กลับไปหน้าแรก</button></div></div>`;
+  const remaining = rateableGroups().filter(g => !g.done);
+  return `<div class="container"><div class="center-block">
+    <div class="center-icon">🎉</div>
+    <div class="center-title">ส่งคะแนนเรียบร้อยแล้ว</div>
+    <div class="center-sub">${remaining.length > 0
+      ? `ยังเหลืออีก ${remaining.length} กลุ่มที่ยังไม่ได้ให้คะแนน`
+      : 'ให้คะแนนครบทุกกลุ่มแล้ว ขอบคุณที่ตั้งใจประเมินเพื่อน'}</div>
+    <br/>
+    ${remaining.length > 0
+      ? '<button class="btn btn-primary" type="button" id="moreGroupsBtn">ให้คะแนนกลุ่มต่อไป</button><br/><br/>'
+      : ''}
+    <button class="btn btn-secondary" type="button" id="restartBtn">ออก (ให้เพื่อนคนต่อไปใช้)</button>
+  </div></div>`;
 }
 
 function renderAdminPin() {
@@ -510,8 +609,8 @@ function renderAdminPin() {
 }
 function renderChangePinForm() {
   return `<div class="panel">
-    <div class="field-group"><label class="field-label">รหัสผ่านเดิม</label><input type="password" id="oldPinInput"></div>
-    <div class="field-group"><label class="field-label">รหัสผ่านใหม่</label><input type="password" id="newPinInput"></div>
+    <div class="field-group"><label class="field-label">รหัสผ่านเดิม</label><input type="password" id="oldPinInput" value="${esc(state.pinDraftOld)}"></div>
+    <div class="field-group"><label class="field-label">รหัสผ่านใหม่</label><input type="password" id="newPinInput" value="${esc(state.pinDraftNew)}"></div>
     ${state.changePinError ? `<div class="error-text">${esc(state.changePinError)}</div>` : ''}
     ${state.changePinSuccess ? `<div class="success-text">บันทึกรหัสผ่านใหม่แล้ว</div>` : ''}
     <div style="display:flex;gap:10px;margin-top:10px;">
@@ -547,11 +646,21 @@ function renderManageTab() {
         ${g.members.map(m => `<span class="chip">${esc(m.name)}<button class="chip-x" type="button" aria-label="ลบ ${esc(m.name)}" data-remove-member-group="${esc(g.id)}" data-remove-member-id="${esc(m.id)}">×</button></span>`).join('') || '<span class="helper-text">ยังไม่มีสมาชิก</span>'}
       </div>
       <div class="inline-add">
-        <input type="text" placeholder="ชื่อสมาชิกใหม่" data-add-member-input="${esc(g.id)}">
+        <input type="text" placeholder="ชื่อสมาชิกใหม่" data-add-member-input="${esc(g.id)}" value="${esc(state.memberDraftByGroup[g.id] || '')}">
         <button class="btn btn-secondary" type="button" data-add-member-btn="${esc(g.id)}">+ เพิ่ม</button>
       </div>
     </div>`).join('');
   return `
+    <div class="panel">
+      <div class="panel-title">คะแนนเต็ม</div>
+      <div class="inline-add">
+        <input type="number" inputmode="numeric" min="1" max="1000" id="maxScoreInput" value="${esc(state.maxScoreDraft !== null ? state.maxScoreDraft : state.maxScore)}">
+        <button class="btn btn-secondary" type="button" id="saveMaxScoreBtn">บันทึก</button>
+      </div>
+      <div class="helper-text">ใช้กับทุกกลุ่ม นักเรียนจะให้คะแนนได้สูงสุดตามค่านี้ ถ้าเปลี่ยนหลังจากมีคะแนนแล้ว คะแนนเดิมจะยังเป็นของเดิม ไม่ถูกแปลงให้</div>
+      ${state.maxScoreFeedback ? `<div class="success-text">${esc(state.maxScoreFeedback)}</div>` : ''}
+      ${state.maxScoreError ? `<div class="error-text">${esc(state.maxScoreError)}</div>` : ''}
+    </div>
     <div class="panel">
       <div class="panel-title">เพิ่มกลุ่ม/สมาชิกอย่างรวดเร็ว</div>
       <textarea id="bulkText" placeholder="กลุ่ม 1: ชื่อ1, ชื่อ2, ชื่อ3&#10;กลุ่ม 2: ชื่อ4, ชื่อ5">${esc(state.bulkText)}</textarea>
@@ -566,7 +675,6 @@ function renderResultsTab() {
   if (state.resultsLoading && !state.results) return `<div class="helper-text">กำลังโหลด...</div>`;
   const results = state.results || {};
   const groupSections = state.groups.map((g, i) => {
-    const expected = Math.max(0, g.members.length - 1);
     const rows = g.members.map(m => {
       const r = results[m.id];
       const count = r ? r.count : 0;
@@ -575,10 +683,10 @@ function renderResultsTab() {
       return `<div>
         <button class="result-row" type="button" data-toggle-result="${esc(m.id)}">
           <span class="result-name">${esc(m.name)}</span>
-          <span class="result-count">${count}/${expected} คน</span>
-          <span class="result-avg">${avg}${r ? ' / 20' : ''}</span>
+          <span class="result-count">${count} คนให้คะแนน</span>
+          <span class="result-avg">${avg}${r ? ' / ' + state.maxScore : ''}</span>
         </button>
-        ${expanded && r ? `<div class="result-detail">${r.entries.map(e => `<div class="result-detail-row"><span>${esc(e.evaluatorName)}</span><span>${e.score} / 20</span></div>`).join('')}</div>` : ''}
+        ${expanded && r ? `<div class="result-detail">${r.entries.map(e => `<div class="result-detail-row"><span class="name">${esc(e.evaluatorName)}</span><span>${e.score} / ${state.maxScore}</span><button type="button" class="result-detail-reset" data-reset-evaluator-id="${esc(e.evaluatorId)}" data-reset-evaluator-name="${esc(e.evaluatorName)}">รีเซ็ต</button></div>`).join('')}</div>` : ''}
       </div>`;
     }).join('');
     return `<div class="group-block">
@@ -604,10 +712,6 @@ function attachHandlers() {
   const retryBtn = document.getElementById('retryBtn');
   if (retryBtn) retryBtn.addEventListener('click', () => { state.screen = 'loading'; render(); loadGroupsForStudent(); });
 
-  document.querySelectorAll('[data-group-id]').forEach(el => {
-    el.addEventListener('click', () => { state.selectedGroupId = el.getAttribute('data-group-id'); state.screen = 'pickSelf'; render(); });
-  });
-
   const backBtn = document.getElementById('backBtn');
   if (backBtn) backBtn.addEventListener('click', handleBack);
 
@@ -615,11 +719,18 @@ function attachHandlers() {
     el.addEventListener('click', () => handleSelectSelf(el.getAttribute('data-member-id')));
   });
 
-  const restartBtn = document.getElementById('restartBtn');
-  if (restartBtn) restartBtn.addEventListener('click', () => {
-    state.selectedGroupId = null; state.selectedSelfId = null; state.ratings = {}; state.submitError = '';
-    state.screen = 'pickGroup'; render();
+  document.querySelectorAll('[data-target-group-id]').forEach(el => {
+    el.addEventListener('click', () => handleSelectTargetGroup(el.getAttribute('data-target-group-id')));
   });
+
+  const moreGroupsBtn = document.getElementById('moreGroupsBtn');
+  if (moreGroupsBtn) moreGroupsBtn.addEventListener('click', () => {
+    state.selectedTargetGroupId = null; state.ratings = {}; state.submitError = '';
+    state.screen = 'pickTargetGroup'; render();
+  });
+
+  const restartBtn = document.getElementById('restartBtn');
+  if (restartBtn) restartBtn.addEventListener('click', resetToStart);
 
   attachRatingHandlers();
 
@@ -631,10 +742,24 @@ function attachHandlers() {
   attachAdminMainHandlers();
 }
 
+function resetToStart() {
+  state.selectedSelfId = null;
+  state.selectedTargetGroupId = null;
+  state.submittedGroupIds = [];
+  state.ratings = {};
+  state.submitError = '';
+  state.screen = 'pickSelf';
+  render();
+}
+
 function handleBack() {
-  if (state.screen === 'pickSelf') { state.screen = 'pickGroup'; state.selectedGroupId = null; }
-  else if (state.screen === 'singleMember') { state.screen = 'pickGroup'; state.selectedGroupId = null; }
-  else if (state.screen === 'rating') { state.screen = 'pickSelf'; state.selectedSelfId = null; state.ratings = {}; }
+  if (state.screen === 'pickTargetGroup') { resetToStart(); return; }
+  if (state.screen === 'rating') {
+    state.screen = 'pickTargetGroup';
+    state.selectedTargetGroupId = null;
+    state.ratings = {};
+    state.submitError = '';
+  }
   render();
 }
 
@@ -643,7 +768,8 @@ async function loadGroupsForStudent() {
     const res = await api.getGroups();
     if (!res.ok) throw new Error(res.error || 'load_failed');
     state.groups = res.groups || [];
-    state.screen = state.groups.length ? 'pickGroup' : 'noGroups';
+    if (res.maxScore) state.maxScore = res.maxScore;
+    state.screen = state.groups.length ? 'pickSelf' : 'noGroups';
   } catch (err) {
     state.screen = 'error';
     state.errorMsg = 'โหลดรายชื่อกลุ่มไม่สำเร็จ';
@@ -653,25 +779,26 @@ async function loadGroupsForStudent() {
 
 async function handleSelectSelf(memberId) {
   state.selectedSelfId = memberId;
-  const others = othersInGroup();
-  if (others.length === 0) { state.screen = 'singleMember'; render(); return; }
   state.screen = 'loading';
   render();
   try {
-    const res = await api.checkSubmitted(state.selectedGroupId, memberId);
+    const res = await api.submittedGroups(memberId);
     if (!res.ok) throw new Error('check_failed');
-    if (res.submitted) {
-      state.screen = 'alreadyDone';
-    } else {
-      state.ratings = {};
-      others.forEach(m => { state.ratings[m.id] = null; });
-      state.submitError = '';
-      state.screen = 'rating';
-    }
+    state.submittedGroupIds = res.groupIds || [];
+    state.screen = 'pickTargetGroup';
   } catch (err) {
     state.screen = 'error';
     state.errorMsg = 'ตรวจสอบสถานะไม่สำเร็จ';
   }
+  render();
+}
+
+function handleSelectTargetGroup(groupId) {
+  state.selectedTargetGroupId = groupId;
+  state.ratings = {};
+  currentTargets().forEach(m => { state.ratings[m.id] = null; });
+  state.submitError = '';
+  state.screen = 'rating';
   render();
 }
 
@@ -682,13 +809,14 @@ function attachRatingHandlers() {
     const fillEl = card.querySelector('.stepper-fill-bar');
 
     function applyDelta(delta) {
+      const max = state.maxScore;
       let cur = state.ratings[targetId];
       cur = cur == null ? 0 : cur;
-      cur = Math.max(0, Math.min(20, cur + delta));
+      cur = Math.max(0, Math.min(max, cur + delta));
       state.ratings[targetId] = cur;
       valueEl.textContent = cur;
       valueEl.classList.remove('unset');
-      fillEl.style.width = ((cur / 20) * 100) + '%';
+      fillEl.style.width = ((cur / max) * 100) + '%';
       updateSubmitState();
     }
 
@@ -712,29 +840,36 @@ function attachRatingHandlers() {
 }
 
 function updateSubmitState() {
-  const others = othersInGroup();
-  const ratedCount = others.filter(m => state.ratings[m.id] != null).length;
-  const allRated = ratedCount === others.length;
+  const targets = currentTargets();
+  const ratedCount = targets.filter(m => state.ratings[m.id] != null).length;
   const submitBtn = document.getElementById('submitBtn');
   const note = document.querySelector('.progress-note');
-  if (note) note.textContent = `ให้คะแนนแล้ว ${ratedCount} จาก ${others.length} คน`;
-  if (submitBtn) submitBtn.disabled = !allRated || state.submitting;
+  if (note) note.textContent = ratedCount > 0 ? `ให้คะแนนแล้ว ${ratedCount} จาก ${targets.length} คน` : 'ยังไม่ได้ให้คะแนนใครเลย';
+  if (submitBtn) submitBtn.disabled = ratedCount === 0 || state.submitting;
 }
 
 async function handleSubmitScores() {
   if (state.submitting) return;
-  const others = othersInGroup();
-  const ratings = others.map(m => ({ targetId: m.id, targetName: m.name, score: state.ratings[m.id] }));
+  const rated = currentTargets().filter(m => state.ratings[m.id] != null);
+  if (rated.length === 0) return;
+  const group = targetGroup();
+  if (!window.confirm(`ส่งคะแนนให้ ${rated.length} คนในกลุ่ม "${group ? group.name : ''}" ใช่ไหม?`)) return;
+  const ratings = rated.map(m => ({ targetId: m.id, targetName: m.name, score: state.ratings[m.id] }));
   state.submitting = true;
   state.submitError = '';
   render();
   try {
-    const selfMember = currentGroup().members.find(m => m.id === state.selectedSelfId);
-    const res = await api.submitScores(state.selectedGroupId, state.selectedSelfId, selfMember.name, ratings);
+    const selfMember = findMemberById(state.selectedSelfId);
+    const res = await api.submitScores(state.selectedSelfId, selfMember.name, ratings);
     if (!res.ok) throw new Error(res.error || 'submit_failed');
+    if (!state.submittedGroupIds.includes(state.selectedTargetGroupId)) {
+      state.submittedGroupIds.push(state.selectedTargetGroupId);
+    }
     state.screen = 'done';
   } catch (err) {
-    state.submitError = 'ส่งคะแนนไม่สำเร็จ ลองใหม่อีกครั้ง';
+    state.submitError = err.message === 'own_group_not_allowed'
+      ? 'ให้คะแนนกลุ่มของตัวเองไม่ได้'
+      : 'ส่งคะแนนไม่สำเร็จ ลองใหม่อีกครั้ง';
   }
   state.submitting = false;
   render();
@@ -776,7 +911,10 @@ async function handleAdminPinSubmit() {
 
 async function loadGroupsForAdmin() {
   const res = await api.getGroups();
-  if (res.ok) state.groups = res.groups || [];
+  if (res.ok) {
+    state.groups = res.groups || [];
+    if (res.maxScore) state.maxScore = res.maxScore;
+  }
   render();
 }
 
@@ -787,6 +925,7 @@ async function loadResults() {
   if (res.ok) {
     state.results = res.results;
     if (res.groups) state.groups = res.groups;
+    if (res.maxScore) state.maxScore = res.maxScore;
     render();
   } else {
     handleAdminActionError(res.error);
@@ -812,6 +951,11 @@ function attachAdminMainHandlers() {
   const cancelPinBtn = document.getElementById('cancelPinBtn');
   if (cancelPinBtn) cancelPinBtn.addEventListener('click', () => { state.showChangePin = false; render(); });
 
+  const oldPinInput = document.getElementById('oldPinInput');
+  if (oldPinInput) oldPinInput.addEventListener('input', e => { state.pinDraftOld = e.target.value; });
+  const newPinInput = document.getElementById('newPinInput');
+  if (newPinInput) newPinInput.addEventListener('input', e => { state.pinDraftNew = e.target.value; });
+
   const savePinBtn = document.getElementById('savePinBtn');
   if (savePinBtn) savePinBtn.addEventListener('click', async () => {
     const oldPin = document.getElementById('oldPinInput').value.trim();
@@ -820,6 +964,7 @@ function attachAdminMainHandlers() {
     const res = await api.changePin(oldPin, newPin);
     if (res.ok) {
       state.adminPin = newPin; state.changePinSuccess = true; state.changePinError = '';
+      state.pinDraftOld = ''; state.pinDraftNew = '';
     } else {
       state.changePinError = res.error === 'wrong_pin' ? 'รหัสผ่านเดิมไม่ถูกต้อง' : 'บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง';
     }
@@ -829,11 +974,44 @@ function attachAdminMainHandlers() {
   document.querySelectorAll('.tab-btn').forEach(el => {
     el.addEventListener('click', () => {
       state.adminTab = el.getAttribute('data-tab');
+      state.bulkFeedback = '';
+      state.maxScoreFeedback = '';
+      state.maxScoreError = '';
       stopResultsPolling();
       render();
       if (state.adminTab === 'results') { loadResults(); startResultsPolling(); }
     });
   });
+
+  const maxScoreInput = document.getElementById('maxScoreInput');
+  if (maxScoreInput) maxScoreInput.addEventListener('input', e => { state.maxScoreDraft = e.target.value; });
+
+  const saveMaxScoreBtn = document.getElementById('saveMaxScoreBtn');
+  if (saveMaxScoreBtn) saveMaxScoreBtn.addEventListener('click', async () => {
+    const value = Number(document.getElementById('maxScoreInput').value);
+    state.maxScoreFeedback = '';
+    if (!value || isNaN(value) || value < 1 || value > 1000 || Math.floor(value) !== value) {
+      state.maxScoreError = 'กรอกเป็นจำนวนเต็ม 1-1000';
+      render();
+      return;
+    }
+    const res = await api.setMaxScore(value, state.adminPin);
+    if (res.ok) {
+      state.maxScore = res.maxScore;
+      state.maxScoreDraft = null;
+      state.maxScoreError = '';
+      state.maxScoreFeedback = `บันทึกแล้ว คะแนนเต็มคือ ${res.maxScore}`;
+    } else if (res.error === 'invalid_max_score') {
+      state.maxScoreError = 'กรอกเป็นจำนวนเต็ม 1-1000';
+    } else {
+      state.maxScoreError = '';
+      handleAdminActionError(res.error);
+    }
+    render();
+  });
+
+  const bulkText = document.getElementById('bulkText');
+  if (bulkText) bulkText.addEventListener('input', e => { state.bulkText = e.target.value; });
 
   const bulkSaveBtn = document.getElementById('bulkSaveBtn');
   if (bulkSaveBtn) bulkSaveBtn.addEventListener('click', async () => {
@@ -876,11 +1054,12 @@ function attachAdminMainHandlers() {
   document.querySelectorAll('[data-add-member-btn]').forEach(el => {
     const groupId = el.getAttribute('data-add-member-btn');
     const input = document.querySelector(`[data-add-member-input="${groupId}"]`);
+    if (input) input.addEventListener('input', e => { state.memberDraftByGroup[groupId] = e.target.value; });
     const doAdd = async () => {
       const name = input.value.trim();
       if (!name) return;
       const res = await api.addMember(groupId, name, state.adminPin);
-      if (res.ok) state.groups = res.groups; else handleAdminActionError(res.error);
+      if (res.ok) { state.groups = res.groups; delete state.memberDraftByGroup[groupId]; } else handleAdminActionError(res.error);
       render();
     };
     el.addEventListener('click', doAdd);
@@ -905,6 +1084,17 @@ function attachAdminMainHandlers() {
       const id = el.getAttribute('data-toggle-result');
       state.expandedResultId = state.expandedResultId === id ? null : id;
       render();
+    });
+  });
+
+  document.querySelectorAll('[data-reset-evaluator-id]').forEach(el => {
+    el.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      const evaluatorId = el.getAttribute('data-reset-evaluator-id');
+      const evaluatorName = el.getAttribute('data-reset-evaluator-name');
+      if (!window.confirm(`ล้างคะแนนที่ ${evaluatorName} เคยให้ทั้งหมดใช่ไหม? (${evaluatorName} จะให้คะแนนใหม่ได้)`)) return;
+      const res = await api.resetEvaluator(evaluatorId, state.adminPin);
+      if (res.ok) loadResults(); else { handleAdminActionError(res.error); render(); }
     });
   });
 
